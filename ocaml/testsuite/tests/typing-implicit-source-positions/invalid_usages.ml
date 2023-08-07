@@ -76,3 +76,18 @@ Error: This function should have type src_pos:[%src_pos] -> unit -> unit
        but its first argument is labeled ~src_pos
        instead of ~(src_pos:[%src_pos])
 |}]
+
+let n = fun ~(src_pos:[%src_pos]) () -> src_pos
+[%%expect{|
+val n : src_pos:[%src_pos] -> unit -> lexing_position = <fun>
+|}]
+
+let _ = n Lexing.dummy_pos ();;
+[%%expect {|
+Line 1, characters 27-29:
+1 | let _ = n Lexing.dummy_pos ();;
+                               ^^
+Error: The function applied to this argument has type
+         src_pos:[%src_pos] -> lexing_position
+This argument cannot be applied without label
+|}]
