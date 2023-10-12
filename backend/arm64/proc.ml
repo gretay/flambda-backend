@@ -334,6 +334,7 @@ let destroyed_at_basic (basic : Cfg_intf.S.basic) =
     destroyed_at_pushtrap
   | Op (Intop Icheckbound | Intop_imm (Icheckbound, _)) ->
     assert false
+  | Op Poll -> destroyed_at_alloc_or_poll
   | Op( Intoffloat | Floatofint
        | Load(Single, _, _) | Store(Single, _, _)) ->
     [| reg_d7 |]
@@ -357,7 +358,6 @@ let destroyed_at_terminator (terminator : Cfg_intf.S.terminator) =
   | Call_no_return { func_symbol = _; alloc; ty_res = _; ty_args = _; }
   | Prim {op  = External { func_symbol = _; alloc; ty_res = _; ty_args = _; }; _} ->
     if alloc then all_phys_regs else destroyed_at_c_call
-  | Poll_and_jump _ -> destroyed_at_alloc_or_poll
 
 (* CR-soon xclerc for xclerc: consider having more destruction points.
    We current return `true` when `destroyed_at_terminator` returns
@@ -382,7 +382,6 @@ let is_destruction_point ~(more_destruction_points : bool) (terminator : Cfg_int
       true
     else
     if alloc then true else false
-  | Poll_and_jump _ -> false
 
 (* Maximal register pressure *)
 
