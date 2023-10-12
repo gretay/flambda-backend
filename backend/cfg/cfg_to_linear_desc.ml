@@ -45,5 +45,6 @@ let from_basic (basic : basic) : Linear.instruction_desc =
           { ident; which_parameter; provenance; is_assignment; regs } ->
         Iname_for_debugger
           { ident; which_parameter; provenance; is_assignment; regs }
+      | Poll -> Ipoll { return_label = None }
     in
     Lop op

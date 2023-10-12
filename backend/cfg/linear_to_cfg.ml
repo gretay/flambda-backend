@@ -402,8 +402,8 @@ let rec create_blocks (t : t) (i : L.instruction) (block : C.basic_block)
     let new_traps =
       match desc with
       | Never -> Misc.fatal_error "Cannot add terminator: Never"
-      | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-      | Poll_and_jump _ | Call _ | Prim _ | Specific_can_raise _ | Switch _ ->
+      | Parity_test _ | Truth_test _ | Float_test _ | Int_test _ | Call _
+      | Prim _ | Specific_can_raise _ | Switch _ ->
         traps
       | Always successor_label -> (
         (* If it is not fallthrough, do not propagate traps, only
@@ -597,10 +597,8 @@ let rec create_blocks (t : t) (i : L.instruction) (block : C.basic_block)
       DLL.add_end block.body (create_instruction t desc i ~stack_offset);
       let stack_offset = stack_offset + bytes in
       create_blocks t i.next block ~stack_offset ~traps
-    | Ipoll { return_label = None } ->
-      terminator_fallthrough (fun return_label -> Poll_and_jump return_label)
-    | Ipoll { return_label = Some return_label } ->
-      terminator (C.Poll_and_jump return_label)
+    | Ipoll { return_label = None } -> basic C.Poll
+    | Ipoll { return_label = Some _return_label } -> assert false (* XXX *)
     | Iintop
         (( Iadd | Isub | Imul | Imulh _ | Idiv | Imod | Iand | Ior | Ixor | Ilsl
          | Ipopcnt | Iclz _ | Ictz _ | Ilsr | Iasr | Icomp _ ) as op) ->
