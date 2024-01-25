@@ -44,6 +44,8 @@ typedef struct {
 #define Chunk_next(c) Chunk_head(c)->next
 #define Chunk_block(c) Chunk_head(c)->block
 
+extern uintnat caml_budget_buffer_size;
+
 extern int caml_gc_phase;
 extern int caml_gc_subphase;
 extern uintnat caml_allocated_words;

@@ -50,6 +50,70 @@ struct mark_stack {
   uintnat size;
 };
 
+uintnat cum_mark_work = 0;
+uintnat cum_sweep_work = 0;
+
+typedef struct {
+  value header;
+  value major_cycles_completed; // must be immediately after [header]
+  value slice_counter;
+  value mark_work;
+  value cum_mark_work;
+  value sweep_work;
+  value cum_sweep_work;
+} budget_info;
+
+value* caml_budgets = NULL;
+uintnat caml_budget_buffer_size = 50;
+
+static uintnat slice_counter = 0;
+static uintnat budget_slot = 0;
+
+static void init_budget_buffer(void)
+{
+  caml_budgets = (value*) malloc(sizeof(value) * (1 + caml_budget_buffer_size));
+  if (caml_budgets == NULL) {
+    caml_fatal_error("Cannot allocate budget buffer");
+  }
+
+  caml_budgets[0] = Make_header(caml_budget_buffer_size, 0, Caml_black);
+  for (int i = 1; i <= caml_budget_buffer_size; i++) {
+    budget_info* info = (budget_info*) malloc(sizeof(budget_info));
+    if (info == NULL) {
+      caml_fatal_error("Cannot allocate budget info");
+    }
+
+    info->header =
+      Make_header((sizeof(budget_info) / sizeof(value)) - 1, 0, Caml_black);
+
+    info->major_cycles_completed = Val_long(0);
+    info->slice_counter = Val_long(0);
+    info->sweep_work = Val_long(0);
+    info->mark_work = Val_long(0);
+    info->cum_mark_work = Val_long(0);
+    info->cum_sweep_work = Val_long(0);
+
+    caml_budgets[i] = (value) &info->major_cycles_completed;
+  }
+}
+
+CAMLprim value caml_get_budget_buffer(void)
+{
+  return (value) &caml_budgets[1];
+}
+
+static budget_info* get_next_budget_info(void)
+{
+  budget_info* info =
+    (budget_info*) (((char*) (caml_budgets[budget_slot + 1])) - sizeof(value));
+
+  budget_slot++;
+  if (budget_slot >= caml_budget_buffer_size) budget_slot = 0;
+
+  return info;
+}
+
+
 uintnat caml_percent_free;
 static uintnat marked_words, heap_wsz_at_cycle_start;
 uintnat caml_major_heap_increment;
@@ -757,13 +821,14 @@ Caml_noinline static intnat do_some_marking
   return work;
 }
 
-static void mark_slice (intnat work)
+static uintnat mark_slice (intnat work)
 {
 #ifdef CAML_INSTR
   int slice_fields = 0; /** eventlog counters */
 #endif /*CAML_INSTR*/
   int slice_pointers = 0;
   struct mark_stack* stk = Caml_state->mark_stack;
+  uintnat old_marked_words = marked_words;
 
   caml_gc_message (0x40, "Marking %"ARCH_INTNAT_PRINTF_FORMAT"d words\n", work);
   caml_gc_message (0x40, "Subphase = %d\n", caml_gc_subphase);
@@ -840,8 +905,10 @@ static void mark_slice (intnat work)
     }
   }
   marked_words -= work;  /* work may be negative */
+  uintnat new_marked_words = marked_words;
   CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_FIELDS, slice_fields);
   CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_POINTERS, slice_pointers);
+  return new_marked_words - old_marked_words;
 }
 
 /* Clean ephemerons */
@@ -872,10 +939,11 @@ static void clean_slice (intnat work)
   }
 }
 
-static void sweep_slice (intnat work)
+static intnat sweep_slice (intnat work)
 {
   char *hp, *sweep_hp, *limit;
   header_t hd;
+  intnat initial_work = work;
 
   caml_gc_message (0x40, "Sweeping %"
                    ARCH_INTNAT_PRINTF_FORMAT "d words\n", work);
@@ -919,6 +987,7 @@ static void sweep_slice (intnat work)
     }
   }
   caml_gc_sweep_hp = sweep_hp;
+  return initial_work - work;
 }
 
 /* The main entry point for the major GC. Called about once for each
@@ -932,6 +1001,16 @@ void caml_major_collection_slice (intnat howmuch)
   double p, dp, filt_p, spend;
   intnat computed_work;
   int i;
+
+  slice_counter++;
+  budget_info* info = get_next_budget_info();
+  info->slice_counter = Val_long(slice_counter);
+  info->major_cycles_completed = Val_long(Caml_state->stat_major_collections);
+  info->mark_work = Val_long(0);
+  info->sweep_work = Val_long(0);
+  info->cum_mark_work = Val_long(cum_mark_work);
+  info->cum_sweep_work = Val_long(cum_sweep_work);
+
   /*
      Free memory at the start of the GC cycle (garbage + free list) (assumed):
                  FM = Caml_state->stat_heap_wsz * caml_percent_free
@@ -1102,7 +1181,10 @@ void caml_major_collection_slice (intnat howmuch)
   if (caml_gc_phase == Phase_mark){
     CAML_EV_COUNTER (EV_C_MAJOR_WORK_MARK, computed_work);
     CAML_EV_BEGIN(EV_MAJOR_MARK);
-    mark_slice (computed_work);
+    uintnat mark_work = mark_slice (computed_work);
+    cum_mark_work += mark_work;
+    info->sweep_work = Val_long(mark_work);
+    info->cum_mark_work = Val_long(cum_mark_work);
     CAML_EV_END(EV_MAJOR_MARK);
     caml_gc_message (0x02, "!");
   }else if (caml_gc_phase == Phase_clean){
@@ -1112,7 +1194,10 @@ void caml_major_collection_slice (intnat howmuch)
     CAMLassert (caml_gc_phase == Phase_sweep);
     CAML_EV_COUNTER (EV_C_MAJOR_WORK_SWEEP, computed_work);
     CAML_EV_BEGIN(EV_MAJOR_SWEEP);
-    sweep_slice (computed_work);
+    uintnat sweep_work = sweep_slice (computed_work);
+    cum_sweep_work += sweep_work;
+    info->sweep_work = Val_long(sweep_work);
+    info->cum_sweep_work = Val_long(cum_sweep_work);
     CAML_EV_END(EV_MAJOR_SWEEP);
     caml_gc_message (0x02, "$");
   }
@@ -1211,6 +1296,8 @@ void caml_init_major_heap (asize_t heap_size)
 {
   int i;
 
+  init_budget_buffer();
+
   Caml_state->stat_heap_wsz =
     caml_clip_heap_chunk_wsz (Wsize_bsize (heap_size));
   Caml_state->stat_top_heap_wsz = Caml_state->stat_heap_wsz;
@@ -1251,6 +1338,7 @@ void caml_init_major_heap (asize_t heap_size)
   caml_allocated_words = 0;
   caml_extra_heap_resources = 0.0;
   for (i = 0; i < Max_major_window; i++) caml_major_ring[i] = 0.0;
+
 }
 
 void caml_set_major_window (int w){

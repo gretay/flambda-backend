@@ -172,34 +172,50 @@ module Memprof =
     external stop : unit -> unit = "caml_memprof_stop"
   end
 
+(* Runtime 5 *)
+(* module Budgets = struct
+ *   type budget_info = {
+ *     major_cycles_completed : int;
+ *     slice_counter : int;
+ *     heap_words : int;
+ *     total_cycle_work : int;
+ *     my_alloc_count : int;
+ *     my_dependent_count : int;
+ *     alloc_work : int;
+ *     dependent_work : int;
+ *     extra_work : int;
+ *     work_counter : int;
+ *     alloc_counter : int;
+ *     slice_target : int;
+ *     slice_budget : int;
+ *     major_slice_budget : int;
+ *     cum_major_slice_budget : int;
+ *     initial_major_slice_work : int;
+ *     mark_work : int;
+ *     cum_mark_work : int;
+ *     sweep_work : int;
+ *     cum_sweep_work : int;
+ *     blocks_marked : int;
+ *     cum_blocks_marked : int;
+ *     ephe_mark_work : int;
+ *     cum_ephe_mark_work : int;
+ *     ephe_sweep_work : int;
+ *     cum_ephe_sweep_work : int;
+ *   }
+ *
+ *   type t = budget_info iarray
+ *
+ *   external get : unit -> t = "caml_get_budget_buffer" [@@noalloc]
+ * end *)
+
 module Budgets = struct
   type budget_info = {
     major_cycles_completed : int;
     slice_counter : int;
-    heap_words : int;
-    total_cycle_work : int;
-    my_alloc_count : int;
-    my_dependent_count : int;
-    alloc_work : int;
-    dependent_work : int;
-    extra_work : int;
-    work_counter : int;
-    alloc_counter : int;
-    slice_target : int;
-    slice_budget : int;
-    major_slice_budget : int;
-    cum_major_slice_budget : int;
-    initial_major_slice_work : int;
     mark_work : int;
     cum_mark_work : int;
     sweep_work : int;
     cum_sweep_work : int;
-    blocks_marked : int;
-    cum_blocks_marked : int;
-    ephe_mark_work : int;
-    cum_ephe_mark_work : int;
-    ephe_sweep_work : int;
-    cum_ephe_sweep_work : int;
   }
 
   type t = budget_info iarray
