@@ -1183,7 +1183,7 @@ void caml_major_collection_slice (intnat howmuch)
     CAML_EV_BEGIN(EV_MAJOR_MARK);
     uintnat mark_work = mark_slice (computed_work);
     cum_mark_work += mark_work;
-    info->sweep_work = Val_long(mark_work);
+    info->mark_work = Val_long(mark_work);
     info->cum_mark_work = Val_long(cum_mark_work);
     CAML_EV_END(EV_MAJOR_MARK);
     caml_gc_message (0x02, "!");
