@@ -600,6 +600,9 @@ module Budgets : sig
     cum_mark_work : int;
     sweep_work : int;
     cum_sweep_work : int;
+    major_words : int;
+    minor_words : int;
+    promoted_words : int;
   }
 
   type t = budget_info iarray

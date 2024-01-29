@@ -56,11 +56,15 @@ uintnat cum_sweep_work = 0;
 typedef struct {
   value header;
   value major_cycles_completed; // must be immediately after [header]
+  value minor_cycles_completed;
   value slice_counter;
   value mark_work;
   value cum_mark_work;
   value sweep_work;
   value cum_sweep_work;
+  value major_words;
+  value minor_words;
+  value promoted_words;
 } budget_info;
 
 value* caml_budgets = NULL;
@@ -92,6 +96,9 @@ static void init_budget_buffer(void)
     info->mark_work = Val_long(0);
     info->cum_mark_work = Val_long(0);
     info->cum_sweep_work = Val_long(0);
+    info->major_words = Val_long(0);
+    info->minor_words = Val_long(0);
+    info->promoted_words = Val_long(0);
 
     caml_budgets[i] = (value) &info->major_cycles_completed;
   }
@@ -1010,6 +1017,9 @@ void caml_major_collection_slice (intnat howmuch)
   info->sweep_work = Val_long(0);
   info->cum_mark_work = Val_long(cum_mark_work);
   info->cum_sweep_work = Val_long(cum_sweep_work);
+  info->major_words = Val_long(Caml_state->stat_major_words);
+  info->minor_words = Val_long(Caml_state->stat_minor_words);
+  info->promoted_words = Val_long(Caml_state->stat_promoted_words);
 
   /*
      Free memory at the start of the GC cycle (garbage + free list) (assumed):
