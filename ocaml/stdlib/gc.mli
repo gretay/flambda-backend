@@ -595,6 +595,7 @@ end
 module Budgets : sig
   type budget_info = {
     major_cycles_completed : int;
+    minor_cycles_completed : int;
     slice_counter : int;
     mark_work : int;
     cum_mark_work : int;

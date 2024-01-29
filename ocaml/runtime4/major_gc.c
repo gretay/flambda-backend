@@ -91,6 +91,7 @@ static void init_budget_buffer(void)
       Make_header((sizeof(budget_info) / sizeof(value)) - 1, 0, Caml_black);
 
     info->major_cycles_completed = Val_long(0);
+    info->minor_cycles_completed = Val_long(0);
     info->slice_counter = Val_long(0);
     info->sweep_work = Val_long(0);
     info->mark_work = Val_long(0);
@@ -1013,6 +1014,7 @@ void caml_major_collection_slice (intnat howmuch)
   budget_info* info = get_next_budget_info();
   info->slice_counter = Val_long(slice_counter);
   info->major_cycles_completed = Val_long(Caml_state->stat_major_collections);
+  info->minor_cycles_completed = Val_long(Caml_state->stat_minor_collections);
   info->mark_work = Val_long(0);
   info->sweep_work = Val_long(0);
   info->cum_mark_work = Val_long(cum_mark_work);
