@@ -604,6 +604,7 @@ module Budgets : sig
     major_words : int;
     minor_words : int;
     promoted_words : int;
+    slice_duration_in_us : int;
   }
 
   type t = budget_info iarray

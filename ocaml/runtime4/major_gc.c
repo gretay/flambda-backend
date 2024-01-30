@@ -35,6 +35,7 @@
 #include "caml/weak.h"
 #include "caml/memprof.h"
 #include "caml/eventlog.h"
+#include <sys/time.h>
 
 #ifdef _MSC_VER
 Caml_inline double fmin(double a, double b) {
@@ -65,6 +66,7 @@ typedef struct {
   value major_words;
   value minor_words;
   value promoted_words;
+  value slice_duration_in_us;
 } budget_info;
 
 value* caml_budgets = NULL;
@@ -100,6 +102,7 @@ static void init_budget_buffer(void)
     info->major_words = Val_long(0);
     info->minor_words = Val_long(0);
     info->promoted_words = Val_long(0);
+    info->slice_duration_in_us = Val_long(0);
 
     caml_budgets[i] = (value) &info->major_cycles_completed;
   }
@@ -1009,6 +1012,7 @@ void caml_major_collection_slice (intnat howmuch)
   double p, dp, filt_p, spend;
   intnat computed_work;
   int i;
+  struct timeval start_time, end_time;
 
   slice_counter++;
   budget_info* info = get_next_budget_info();
@@ -1022,6 +1026,7 @@ void caml_major_collection_slice (intnat howmuch)
   info->major_words = Val_long(Caml_state->stat_major_words);
   info->minor_words = Val_long(Caml_state->stat_minor_words);
   info->promoted_words = Val_long(Caml_state->stat_promoted_words);
+
 
   /*
      Free memory at the start of the GC cycle (garbage + free list) (assumed):
@@ -1082,6 +1087,11 @@ void caml_major_collection_slice (intnat howmuch)
   */
 
   if (caml_major_slice_begin_hook != NULL) (*caml_major_slice_begin_hook) ();
+
+  if (gettimeofday (&start_time, NULL) != 0) {
+    start_time.tv_sec = 0;
+    start_time.tv_usec = 0;
+  }
 
   p = (double) caml_allocated_words * 3.0 * (100 + caml_percent_free)
       / Caml_state->stat_heap_wsz / caml_percent_free / 2.0;
@@ -1258,6 +1268,15 @@ void caml_major_collection_slice (intnat howmuch)
   caml_dependent_allocated = 0;
   caml_extra_heap_resources = 0.0;
   if (caml_major_slice_end_hook != NULL) (*caml_major_slice_end_hook) ();
+
+  if (gettimeofday (&end_time, NULL) != 0) {
+    end_time.tv_sec = 0;
+    end_time.tv_usec = 0;
+  }
+
+  info->slice_duration_in_us =
+    Val_long((end_time.tv_sec - start_time.tv_sec) * 1000000
+             + (end_time.tv_usec - start_time.tv_usec));
 }
 
 /* This does not call [caml_compact_heap_maybe] because the estimates of
