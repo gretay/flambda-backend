@@ -627,7 +627,7 @@ static void update_major_slice_work(intnat howmuch) {
               );
 }
 
-#define Chunk_size 0x4000
+#define Chunk_size 0x400000000
 
 typedef enum {
   Slice_uninterruptible,
