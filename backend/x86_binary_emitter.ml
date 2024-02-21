@@ -1802,6 +1802,7 @@ let assemble_instr b loc = function
   | MUL src -> emit_mul b ~src
   | IDIV dst -> emit_idiv b dst
   | J (condition, dst) -> emit_j b !loc condition dst
+  | JB32 dst -> emit_j b !loc B dst
   | JMP dst -> emit_jmp b !loc dst
   | LEAVE -> emit_leave b
   | LEA (src, dst) -> emit_LEA b dst src
@@ -1823,6 +1824,7 @@ let assemble_instr b loc = function
   | MOVSXD (src, dst) -> emit_movsxd b dst src
   | NEG dst -> emit_neg b dst
   | NOP -> buf_int8 b 0x90
+  | NOPS n -> for _ = 1 to n do buf_int8 b 0x90 done
   | OR (src, dst) -> emit_OR b dst src
   | PAUSE -> emit_pause b
   | PUSH dst -> emit_push b dst
