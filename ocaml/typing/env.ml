@@ -434,15 +434,23 @@ module IdTbl =
         layer = Map {f; next}
       }
 
-    let rec find_same id tbl =
-      try Ident.find_same id tbl.current
+    let rec find_same_and_locks id tbl macc =
+      try Ident.find_same id tbl.current, macc
       with Not_found as exn ->
         begin match tbl.layer with
-        | Open {next; _} -> find_same id next
-        | Map {f; next} -> f (find_same id next)
-        | Lock {lock=_; next} -> find_same id next
+        | Open {next; _} -> find_same_and_locks id next macc
+        | Map {f; next} ->
+          let x, locks = find_same_and_locks id next macc in
+          f x, locks
+        | Lock {lock; next} -> find_same_and_locks id next (lock :: macc)
         | Nothing -> raise exn
         end
+
+    let find_same_and_locks id tbl = find_same_and_locks id tbl []
+
+    let find_same id tbl =
+      let x, ([] : empty list) = find_same_and_locks id tbl in
+      x
 
     let rec find_name_and_locks wrap ~mark name tbl macc : _ Result.t =
       try
@@ -577,7 +585,7 @@ module IdTbl =
       let keys2 = local_keys tbl2 [] in
       List.filter
         (fun id ->
-           try ignore (find_same id tbl1); false
+           try ignore (find_same_and_locks id tbl1); false
            with Not_found -> true)
         keys2
 
@@ -927,7 +935,7 @@ let set_unit_name = Current_unit_name.set
 let get_unit_name = Current_unit_name.get
 
 let find_same_module id tbl =
-  match IdTbl.find_same id tbl with
+  match IdTbl.find_same_and_locks id tbl |> fst with
   | x -> x
   | exception Not_found
     when Ident.is_global id && not (Current_unit_name.is_ident id) ->
@@ -1192,13 +1200,13 @@ let find_module_lazy ~alias path env =
 let find_value_full path env =
   match path with
   | Pident id -> begin
-      match IdTbl.find_same id env.values with
-      | Val_bound data -> data
-      | Val_unbound _ -> raise Not_found
+      match IdTbl.find_same_and_locks id env.values with
+      | Val_bound data, locks -> data, locks
+      | Val_unbound _, _ -> raise Not_found
     end
   | Pdot(p, s) ->
       let sc = find_structure_components p env in
-      NameMap.find s sc.comp_values
+      NameMap.find s sc.comp_values, []
   | Papply _ | Pextra_ty _ -> raise Not_found
 
 let find_extension_full path env =
@@ -1277,7 +1285,7 @@ let find_modtype path env =
 
 let find_class_full path env =
   match path with
-  | Pident id -> IdTbl.find_same id env.classes
+  | Pident id -> IdTbl.find_same_and_locks id env.classes |> fst
   | Pdot(p, s) ->
       let sc = find_structure_components p env in
       NameMap.find s sc.comp_classes
@@ -1292,7 +1300,7 @@ let find_cltype path env =
   | Papply _ | Pextra_ty _ -> raise Not_found
 
 let find_value path env =
-  (find_value_full path env).vda_description
+  (find_value_full path env |> fst).vda_description
 
 let find_class path env =
   (find_class_full path env).clda_declaration
@@ -1327,7 +1335,7 @@ and get_address a =
   Lazy_backtrack.force force_address a
 
 let find_value_address path env =
-  get_address (find_value_full path env).vda_address
+  get_address (find_value_full path env |> fst).vda_address
 
 let find_class_address path env =
   get_address (find_class_full path env).clda_address
@@ -1378,12 +1386,12 @@ let find_shape env (ns : Shape.Sig_component_kind.t) id =
   | Extension_constructor ->
       (TycompTbl.find_same id env.constrs).cda_shape
   | Value ->
-      begin match IdTbl.find_same id env.values with
+      begin match IdTbl.find_same_and_locks id env.values |> fst with
       | Val_bound x -> x.vda_shape
       | Val_unbound _ -> raise Not_found
       end
   | Module ->
-      begin match IdTbl.find_same id env.modules with
+      begin match IdTbl.find_same_and_locks id env.modules |> fst with
       | Mod_local { mda_shape; _ } -> mda_shape
       | Mod_persistent -> Shape.for_persistent_unit (Ident.name id)
       | Mod_unbound _ ->
@@ -1399,7 +1407,7 @@ let find_shape env (ns : Shape.Sig_component_kind.t) id =
   | Module_type ->
       (IdTbl.find_same id env.modtypes).mtda_shape
   | Class ->
-      (IdTbl.find_same id env.classes).clda_shape
+      (IdTbl.find_same_and_locks id env.classes |> fst).clda_shape
   | Class_type ->
       (IdTbl.find_same id env.cltypes).cltda_shape
 
