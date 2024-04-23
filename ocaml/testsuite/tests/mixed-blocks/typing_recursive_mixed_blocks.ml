@@ -1,8 +1,17 @@
 (* TEST
+<<<<<<< HEAD
  flags = "-extension layouts_alpha"
 
  * runtime5
  ** expect
+||||||| parent of 363966e5 (Implement mixed blocks in runtime 4 (#2422))
+ flags = "-extension layouts_alpha";
+ runtime5;
+ expect;
+=======
+ flags = "-extension layouts_alpha";
+ expect;
+>>>>>>> 363966e5 (Implement mixed blocks in runtime 4 (#2422))
 *)
 
 type rec_t = { rec_t : rec_t; x1 : float# }

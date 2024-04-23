@@ -1,7 +1,16 @@
 (* TEST
+<<<<<<< HEAD
   * runtime5
   ** expect
  *)
+||||||| parent of 363966e5 (Implement mixed blocks in runtime 4 (#2422))
+ runtime5;
+ expect;
+*)
+=======
+ expect;
+*)
+>>>>>>> 363966e5 (Implement mixed blocks in runtime 4 (#2422))
 
 (* Mixed float-float# blocks are always OK. *)
 type t =

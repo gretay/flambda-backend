@@ -1,10 +1,30 @@
 (* TEST
+<<<<<<< HEAD
    flags = "-extension layouts_alpha"
 
    * runtime5
    ** native
    ** bytecode
  *)
+||||||| parent of 363966e5 (Implement mixed blocks in runtime 4 (#2422))
+ flags = "-extension layouts_alpha";
+ runtime5;
+ {
+   native;
+ }{
+   bytecode;
+ }
+*)
+=======
+ flags = "-extension layouts_alpha";
+ flambda2;
+ {
+   native;
+ }{
+   bytecode;
+ }
+*)
+>>>>>>> 363966e5 (Implement mixed blocks in runtime 4 (#2422))
 
 type t = { t : t; flt : float# }
 

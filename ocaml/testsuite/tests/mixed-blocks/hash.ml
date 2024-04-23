@@ -1,4 +1,5 @@
 (* TEST
+<<<<<<< HEAD
  flags = "-extension layouts_alpha"
  program = "${test_build_directory}/hash.exe"
 all_modules = "hash.ml"
@@ -14,6 +15,43 @@ all_modules = "hash.ml"
  **** run
  ***** check-program-output
    reference = "${test_source_directory}/hash.native.reference"
+||||||| parent of 363966e5 (Implement mixed blocks in runtime 4 (#2422))
+ flags = "-extension layouts_alpha";
+ program = "${test_build_directory}/hash.exe";
+ all_modules = "hash.ml";
+ runtime5;
+ {
+   setup-ocamlc.opt-build-env;
+   ocamlc.opt;
+   run;
+   reference = "${test_source_directory}/hash.byte.reference";
+   check-program-output;
+ }{
+   setup-ocamlopt.opt-build-env;
+   ocamlopt.opt;
+   run;
+   reference = "${test_source_directory}/hash.native.reference";
+   check-program-output;
+ }
+=======
+ flags = "-extension layouts_alpha";
+ program = "${test_build_directory}/hash.exe";
+ all_modules = "hash.ml";
+ flambda2;
+ {
+   setup-ocamlc.opt-build-env;
+   ocamlc.opt;
+   run;
+   reference = "${test_source_directory}/hash.byte.reference";
+   check-program-output;
+ }{
+   setup-ocamlopt.opt-build-env;
+   ocamlopt.opt;
+   run;
+   reference = "${test_source_directory}/hash.native.reference";
+   check-program-output;
+ }
+>>>>>>> 363966e5 (Implement mixed blocks in runtime 4 (#2422))
 *)
 
 (* Currently bytecode/native hashes of mixed records are different.
@@ -40,7 +78,7 @@ let () =
   |> printf "\t{ x : float; y : float# } = %d\n"
 
 
-let () = 
+let () =
   let open struct
     type t =
       { x : float#;

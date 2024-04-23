@@ -1,4 +1,5 @@
 (* TEST
+<<<<<<< HEAD
    * runtime5
    ** flambda2
    reference = "${test_source_directory}/unboxed_floats_alpha.reference"
@@ -6,6 +7,28 @@
      flags = "-extension layouts_alpha"
    *** bytecode
      flags = "-extension layouts_alpha"
+||||||| parent of 363966e5 (Implement mixed blocks in runtime 4 (#2422))
+ runtime5;
+ reference = "${test_source_directory}/unboxed_floats_alpha.reference";
+ flambda2;
+ {
+   flags = "-extension layouts_alpha";
+   native;
+ }{
+   flags = "-extension layouts_alpha";
+   bytecode;
+ }
+=======
+ reference = "${test_source_directory}/unboxed_floats_alpha.reference";
+ flambda2;
+ {
+   flags = "-extension layouts_alpha";
+   native;
+ }{
+   flags = "-extension layouts_alpha";
+   bytecode;
+ }
+>>>>>>> 363966e5 (Implement mixed blocks in runtime 4 (#2422))
 *)
 
 (* This should be read as a continuation of the [unboxed_floats.ml] test.
