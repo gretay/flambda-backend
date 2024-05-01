@@ -1013,6 +1013,7 @@ typing/includecore.cmi : \
     typing/types.cmi \
     typing/typedtree.cmi \
     typing/path.cmi \
+    typing/mode.cmi \
     parsing/location.cmi \
     typing/jkind.cmi \
     typing/ident.cmi \
@@ -1460,6 +1461,7 @@ typing/printtyp.cmi : \
     typing/shape.cmi \
     typing/path.cmi \
     typing/outcometree.cmi \
+    typing/mode.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
     typing/ident.cmi \
@@ -1942,6 +1944,7 @@ typing/typedecl.cmi : \
     typing/shape.cmi \
     typing/path.cmi \
     parsing/parsetree.cmi \
+    typing/mode.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
     utils/language_extension.cmi \
@@ -2184,14 +2187,12 @@ typing/typemod.cmi : \
     utils/compilation_unit.cmi \
     file_formats/cmi_format.cmi
 typing/typemode.cmo : \
-    utils/warnings.cmi \
     typing/mode.cmi \
     parsing/location.cmi \
     parsing/jane_syntax_parsing.cmi \
     parsing/jane_syntax.cmi \
     typing/typemode.cmi
 typing/typemode.cmx : \
-    utils/warnings.cmx \
     typing/mode.cmx \
     parsing/location.cmx \
     parsing/jane_syntax_parsing.cmx \
@@ -2199,6 +2200,7 @@ typing/typemode.cmx : \
     typing/typemode.cmi
 typing/typemode.cmi : \
     typing/mode.cmi \
+    parsing/location.cmi \
     parsing/jane_syntax.cmi
 typing/typeopt.cmo : \
     typing/types.cmi \

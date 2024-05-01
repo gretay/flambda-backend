@@ -422,19 +422,6 @@ let value_regional_to_local mode =
   |> value_to_alloc_r2l
   |> alloc_as_value
 
-(* Describes how a modality affects field projection. Returns the mode
-   of the projection given the mode of the record. *)
-let apply_modality
-  : type l r. _ -> (l * r) Value.t -> (l * r) Value.t
-  = fun global_flag mode ->
-  match global_flag with
-  | Global_flag.Global ->
-      mode
-      |> Value.meet_with (Comonadic Areality) Regionality.Const.Global
-      |> Value.join_with (Monadic Uniqueness) Uniqueness.Const.Shared
-      |> Value.meet_with (Comonadic Linearity) Linearity.Const.Many
-  | Global_flag.Unrestricted -> mode
-
 let mode_default mode =
   { position = RNontail;
     closure_context = None;
@@ -446,7 +433,7 @@ let mode_legacy = mode_default Value.legacy
 
 let mode_modality modality expected_mode =
   expected_mode.mode
-  |> apply_modality modality
+  |> Modality.Value.apply modality
   |> mode_default
 
 (* used when entering a function;
@@ -2377,11 +2364,11 @@ and type_pat_aux
        shouldn't be too bad.  We can inline this when we upstream this code and
        combine the two array pattern constructors. *)
     let ty_elt, arg_sort = solve_Ppat_array ~refine loc env mutability expected_ty in
-    let modalities : Global_flag.t =
-      (* CR zqian: decouple mutable and global modality *)
-      if Types.is_mutable mutability then Global else Unrestricted
+    let modalities =
+      if Types.is_mutable mutability then Typemode.mutable_implied_modalities
+      else Modality.Value.id
     in
-    let alloc_mode = apply_modality modalities alloc_mode.mode in
+    let alloc_mode = Modality.Value.apply modalities alloc_mode.mode in
     let alloc_mode = simple_pat_mode alloc_mode in
     let pl = List.map (fun p -> type_pat ~alloc_mode tps Value p ty_elt) spl in
     rvp {
@@ -2624,7 +2611,7 @@ and type_pat_aux
       let args =
         List.map2
           (fun p (ty, gf) ->
-             let alloc_mode = apply_modality gf alloc_mode.mode in
+             let alloc_mode = Modality.Value.apply gf alloc_mode.mode in
              let alloc_mode = simple_pat_mode alloc_mode in
              type_pat ~alloc_mode tps Value p ty)
           sargs (List.combine ty_args_ty ty_args_gf)
@@ -2667,7 +2654,7 @@ and type_pat_aux
       let type_label_pat (label_lid, label, sarg) =
         let ty_arg =
           solve_Ppat_record_field ~refine loc env label label_lid record_ty in
-        let mode = apply_modality label.lbl_global alloc_mode.mode in
+        let mode = Modality.Value.apply label.lbl_modalities alloc_mode.mode in
         let alloc_mode = simple_pat_mode mode in
         (label_lid, label, type_pat tps Value ~alloc_mode sarg ty_arg)
       in
@@ -2690,7 +2677,8 @@ and type_pat_aux
       let lbl_a_list = List.map type_label_pat lbl_a_list in
       rvp @@ solve_expected (make_record_pat lbl_a_list)
   | Ppat_array spl ->
-      type_pat_array (Mutable Alloc.Comonadic.Const.legacy) spl sp.ppat_attributes
+      type_pat_array (Mutable Alloc.Comonadic.Const.legacy)
+         spl sp.ppat_attributes
   | Ppat_or(sp1, sp2) ->
       (* Reset pattern forces for just [tps2] because later we append
          [tps1] and [tps2]'s pattern forces, and we don't want to
@@ -5570,7 +5558,7 @@ and type_expect_
       in
       let type_label_exp ((_, label, _) as x) =
         check_construct_mutability label.lbl_mut argument_mode;
-        let argument_mode = mode_modality label.lbl_global argument_mode in
+        let argument_mode = mode_modality label.lbl_modalities argument_mode in
         type_label_exp true env argument_mode loc ty_record x
       in
       let lbl_exp_list = List.map type_label_exp lbl_a_list in
@@ -5631,10 +5619,10 @@ and type_expect_
                   unify_exp_types loc env ty_arg1 ty_arg2;
                   with_explanation (fun () ->
                     unify_exp_types loc env (instance ty_expected) ty_res2);
-                  let mode = apply_modality lbl.lbl_global mode in
+                  let mode = Modality.Value.apply lbl.lbl_modalities mode in
                   check_construct_mutability lbl.lbl_mut argument_mode;
                   let argument_mode =
-                    mode_modality lbl.lbl_global argument_mode
+                    mode_modality lbl.lbl_modalities argument_mode
                   in
                   submode ~loc ~env mode argument_mode;
                   Kept (ty_arg1, lbl.lbl_mut,
@@ -5681,7 +5669,7 @@ and type_expect_
           ty_arg
         end ~post:generalize_structure
       in
-      let mode = apply_modality label.lbl_global rmode in
+      let mode = Modality.Value.apply label.lbl_modalities rmode in
       let boxing : texp_field_boxing =
         let is_float_boxing =
           match label.lbl_repres with
@@ -5725,7 +5713,7 @@ and type_expect_
         match label.lbl_mut with
         | Mutable m0 ->
           let mode = mutable_mode m0 |> mode_default in
-          let mode = mode_modality label.lbl_global mode in
+          let mode = mode_modality label.lbl_modalities mode in
           type_label_exp false env mode loc ty_record (lid, label, snewval)
         | Immutable ->
           raise(Error(loc, env, Label_not_mutable lid.txt))
@@ -8678,11 +8666,10 @@ and type_generic_array
   =
   let alloc_mode, argument_mode = register_allocation expected_mode in
   let type_, modalities =
-    (* CR zqian: decouple mutable and global *)
     if Types.is_mutable mutability then
-      Predef.type_array, Global_flag.Global
+      Predef.type_array, Typemode.mutable_implied_modalities
     else
-      Predef.type_iarray, Global_flag.Unrestricted
+      Predef.type_iarray, Modality.Value.id
   in
   check_construct_mutability mutability argument_mode;
   let argument_mode = mode_modality modalities argument_mode in
