@@ -2305,8 +2305,14 @@ module Modality = struct
         Join_const (Const.join (Const.min_with ax c0) c)
       | Meet_with _, Join_const _ -> assert false
 
+    let morph_of : type l r. t -> (Const.t, Const.t, l * r) C.morph = function
+      (* Monadic fragment is flipped *)
+      | Join_const c -> C.Meet_with c
+
     let apply : type l r. t -> (l * r) Mode.t -> (l * r) Mode.t =
-     fun t x -> match t with Join_const c -> Mode.join_const c x
+     fun t x ->
+      let morph = morph_of t in
+      Mode.Obj.Solver.via_monotone Mode.Obj.obj morph x
 
     let to_list = function
       | Join_const c ->
@@ -2349,8 +2355,13 @@ module Modality = struct
         Meet_const (Const.meet (Const.max_with ax c0) c)
       | Join_with _, Meet_const _ -> assert false
 
+    let morph_of : type l r. t -> (Const.t, Const.t, l * r) C.morph = function
+      | Meet_const c -> C.Meet_with c
+
     let apply : type l r. t -> (l * r) Mode.t -> (l * r) Mode.t =
-     fun t x -> match t with Meet_const c -> Mode.meet_const c x
+     fun t x ->
+      let morph = morph_of t in
+      Mode.Obj.Solver.via_monotone Mode.Obj.obj morph x
 
     let to_list = function
       | Meet_const c ->
@@ -2402,10 +2413,151 @@ module Modality = struct
 
     let singleton a = cons a id
 
+    let join_meet { monadic; comonadic } =
+      let monadic = Monadic.Join_const monadic in
+      let comonadic = Comonadic.Meet_const comonadic in
+      { monadic; comonadic }
+
     let to_list { monadic; comonadic } =
       Comonadic.to_list comonadic @ Monadic.to_list monadic
 
     let print ppf ({ monadic; comonadic } : t) =
       Format.fprintf ppf "%a,%a" Monadic.print monadic Comonadic.print comonadic
   end
+end
+
+module Crossing = struct
+  module Monadic = struct
+    module Mode = Value.Monadic
+    module Const = Mode.Const
+
+    (* The monadic fragment is flipped, so many of the following definitions are
+       flipped too.*)
+    type t =
+      { left : (Const.t, Const.t, disallowed * allowed) C.morph;
+        right : (Const.t, Const.t, allowed * disallowed) C.morph
+      }
+
+    let apply_left : type l r. t -> (l * r) Mode.t -> (l * disallowed) Mode.t =
+     fun { left; _ } m ->
+      Mode.Obj.Solver.via_monotone Mode.Obj.obj (C.allow_right left)
+        (Mode.disallow_right m)
+
+    let apply_right : type l r. t -> (l * r) Mode.t -> (disallowed * r) Mode.t =
+     fun { right; _ } m ->
+      Mode.Obj.Solver.via_monotone Mode.Obj.obj (C.allow_left right)
+        (Mode.disallow_left m)
+
+    let none = { left = C.Id; right = C.Id }
+
+    let modality modality { left; right } =
+      let f = Modality.Monadic.morph_of modality in
+      let f_r = C.left_adjoint Mode.Obj.obj f in
+      let f_l = C.right_adjoint Mode.Obj.obj f in
+      let right =
+        C.compose Mode.Obj.obj
+          (C.compose Mode.Obj.obj f_r right)
+          (C.disallow_right f)
+      in
+      let left =
+        C.compose Mode.Obj.obj
+          (C.compose Mode.Obj.obj f_l left)
+          (C.disallow_left f)
+      in
+      { left; right }
+  end
+
+  module Comonadic = struct
+    module Mode = Value.Comonadic
+    module Const = Mode.Const
+
+    type t =
+      { left : (Const.t, Const.t, allowed * disallowed) C.morph;
+        right : (Const.t, Const.t, disallowed * allowed) C.morph
+      }
+
+    let apply_left : type l r. t -> (l * r) Mode.t -> (l * disallowed) Mode.t =
+     fun { left; _ } m ->
+      Mode.Obj.Solver.via_monotone Mode.Obj.obj (C.allow_left left)
+        (Mode.disallow_right m)
+
+    let apply_right : type l r. t -> (l * r) Mode.t -> (disallowed * r) Mode.t =
+     fun { right; _ } m ->
+      Mode.Obj.Solver.via_monotone Mode.Obj.obj (C.allow_right right)
+        (Mode.disallow_left m)
+
+    let apply_left_alloc :
+        type l r.
+        t -> (l * r) Alloc.Comonadic.t -> (l * disallowed) Alloc.Comonadic.t =
+     fun { left; _ } m ->
+      let open Alloc.Comonadic in
+      let f = C.Map_comonadic C.Locality_as_regionality in
+      let f_l = C.left_adjoint Mode.Obj.obj f in
+      disallow_right m
+      |> Mode.Obj.Solver.via_monotone Mode.Obj.obj f
+      |> Mode.Obj.Solver.via_monotone Mode.Obj.obj (C.allow_left left)
+      |> Obj.Solver.via_monotone Obj.obj f_l
+
+    let apply_right_alloc :
+        type l r.
+        t -> (l * r) Alloc.Comonadic.t -> (disallowed * r) Alloc.Comonadic.t =
+     fun { right; _ } m ->
+      let open Alloc.Comonadic in
+      let f = C.Map_comonadic C.Locality_as_regionality in
+      let f_r = C.right_adjoint Mode.Obj.obj f in
+      disallow_left m
+      |> Mode.Obj.Solver.via_monotone Mode.Obj.obj f
+      |> Mode.Obj.Solver.via_monotone Mode.Obj.obj (C.allow_right right)
+      |> Obj.Solver.via_monotone Obj.obj f_r
+
+    let none = { left = C.Id; right = C.Id }
+
+    let modality modality { left; right } =
+      let f = Modality.Comonadic.morph_of modality in
+      let f_l = C.left_adjoint Mode.Obj.obj f in
+      let f_r = C.right_adjoint Mode.Obj.obj f in
+      let right =
+        C.compose Mode.Obj.obj
+          (C.compose Mode.Obj.obj f_r right)
+          (C.disallow_left f)
+      in
+      let left =
+        C.compose Mode.Obj.obj
+          (C.compose Mode.Obj.obj f_l left)
+          (C.disallow_right f)
+      in
+      { left; right }
+  end
+
+  type t = (Monadic.t, Comonadic.t) monadic_comonadic
+
+  let apply_left t { monadic; comonadic } =
+    let monadic = Monadic.apply_left t.monadic monadic in
+    let comonadic = Comonadic.apply_left t.comonadic comonadic in
+    { monadic; comonadic }
+
+  let apply_right t { monadic; comonadic } =
+    let monadic = Monadic.apply_right t.monadic monadic in
+    let comonadic = Comonadic.apply_right t.comonadic comonadic in
+    { monadic; comonadic }
+
+  let apply_left_alloc t { monadic; comonadic } =
+    let monadic = Monadic.apply_left t.monadic monadic in
+    let comonadic = Comonadic.apply_left_alloc t.comonadic comonadic in
+    { monadic; comonadic }
+
+  let apply_right_alloc t { monadic; comonadic } =
+    let monadic = Monadic.apply_right t.monadic monadic in
+    let comonadic = Comonadic.apply_right_alloc t.comonadic comonadic in
+    { monadic; comonadic }
+
+  let none =
+    let monadic = Monadic.none in
+    let comonadic = Comonadic.none in
+    { monadic; comonadic }
+
+  let modality m { monadic; comonadic } =
+    let monadic = Monadic.modality m.monadic monadic in
+    let comonadic = Comonadic.modality m.comonadic comonadic in
+    { monadic; comonadic }
 end

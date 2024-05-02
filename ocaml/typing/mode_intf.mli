@@ -487,6 +487,12 @@ module type S = sig
       (** [singleton m] returns the modality containing only [m]. *)
       val singleton : atom -> t
 
+      (** [join_meet {monadic; comonadic}] returns the modality
+        [join_with(monadic)] and [meet_with(comonadic)]. This is only used by
+        [jkind.ml]. *)
+      val join_meet :
+        (Value.Monadic.Const.t, Value.Comonadic.Const.t) monadic_comonadic -> t
+
       (** Returns the list of [atom] in the given modality. The list is
           commutative. *)
       val to_list : t -> atom list
@@ -513,5 +519,33 @@ module type S = sig
       val print : Format.formatter -> t -> unit
     end
     with type atom := t
+  end
+
+  module Crossing : sig
+    (** Represents a crossing of [Value.t] modes. *)
+    type t
+
+    (** [apply_left t m] gives the lowest variant of [m] as allowed by [t]. *)
+    val apply_left : t -> ('l * 'r) Value.t -> ('l * disallowed) Value.t
+
+    (** [apply_right t m] gives the highest variant of [m] as allowed by [t]. *)
+    val apply_right : t -> ('l * 'r) Value.t -> (disallowed * 'r) Value.t
+
+    (** Similar to [apply_left] but via [alloc_as_value]. Concretely,
+        [alloc_as_value(apply_left_alloc t m)
+         = apply_left t (alloc_as_value m)] *)
+    val apply_left_alloc : t -> ('l * 'r) Alloc.t -> ('l * disallowed) Alloc.t
+
+    (** Similar to [apply_right] but via [alloc_as_value]. Concretely,
+        [alloc_as_value(apply_right_alloc t m)
+         = apply_right t (alloc_as_value m)] *)
+    val apply_right_alloc : t -> ('l * 'r) Alloc.t -> (disallowed * 'r) Alloc.t
+
+    (** The crossing that does nothing. *)
+    val none : t
+
+    (** [modality m t] gives the crossing of [a @@ m] where type [a] has
+    crossing [t]. *)
+    val modality : Modality.Value.t -> t -> t
   end
 end
