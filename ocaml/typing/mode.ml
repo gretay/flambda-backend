@@ -1672,6 +1672,10 @@ module Value = struct
     let max_axis : type m a d. (m, a, d) axis -> a = function
       | Comonadic ax -> Comonadic.max_axis ax
       | Monadic ax -> Monadic.max_axis ax
+
+    let split = split
+
+    let merge = merge
   end
 
   let min = { comonadic = Comonadic.min; monadic = Monadic.min }
@@ -2113,6 +2117,9 @@ module Alloc = struct
     { comonadic; monadic }
 
   module Const = struct
+    let monadic_to_comonadic_min m =
+      C.apply Comonadic.Obj.obj C.Monadic_to_comonadic_min m
+
     type t = (Locality.Const.t, Linearity.Const.t, Uniqueness.Const.t) modes
 
     module Monadic = Monadic.Const
@@ -2175,22 +2182,6 @@ module Alloc = struct
       let uniqueness = diff Uniqueness.Const.le m0.uniqueness m1.uniqueness in
       { locality; linearity; uniqueness }
 
-    (** See [Alloc.close_over] for explanation. *)
-    let close_over m =
-      let { monadic; comonadic } = split m in
-      let comonadic =
-        Comonadic.join comonadic
-          (C.monadic_to_comonadic_min C.Comonadic_with_locality monadic)
-      in
-      let monadic = Monadic.min in
-      merge { comonadic; monadic }
-
-    (** See [Alloc.partial_apply] for explanation. *)
-    let partial_apply m =
-      let { comonadic; _ } = split m in
-      let monadic = Monadic.min in
-      merge { comonadic; monadic }
-
     let print_axis : type m a d. (m, a, d) axis -> _ -> a -> unit =
      fun ax ppf a ->
       let obj = proj_obj ax in
@@ -2222,28 +2213,6 @@ module Alloc = struct
     let monadic = Monadic.zap_to_legacy monadic in
     let comonadic = Comonadic.zap_to_legacy comonadic in
     merge { monadic; comonadic }
-
-  (** This is about partially applying [A -> B -> C] to [A] and getting [B ->
-    C]. [comonadic] and [monadic] constutute the mode of [A], and we need to
-    give the lower bound mode of [B -> C]. *)
-  let close_over { comonadic; monadic } =
-    let comonadic = Comonadic.disallow_right comonadic in
-    (* The comonadic of the returned function is constrained by the monadic of the closed argument via the dualizing morphism. *)
-    let comonadic1 = monadic_to_comonadic_min monadic in
-    (* It's also constrained by the comonadic of the closed argument. *)
-    let comonadic = Comonadic.join [comonadic; comonadic1] in
-    (* The returned function crosses all monadic axes that we know of
-       (uniqueness/contention). *)
-    let monadic = Monadic.disallow_right Monadic.min in
-    { comonadic; monadic }
-
-  (** Similar to above, but we are given the mode of [A -> B -> C], and need to
-      give the lower bound mode of [B -> C]. *)
-  let partial_apply { comonadic; _ } =
-    (* The returned function crosses all monadic axes that we know of. *)
-    let monadic = Monadic.disallow_right Monadic.min in
-    let comonadic = Comonadic.disallow_right comonadic in
-    { comonadic; monadic }
 end
 
 module Const = struct
