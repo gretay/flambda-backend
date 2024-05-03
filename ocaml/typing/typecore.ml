@@ -831,13 +831,15 @@ let mutable_mode m0 =
   in
   m0 |> Const.alloc_as_value |> Value.of_const
 
-(** Takes the mutability on a field, and expected mode of the record (adjusted
-    for allocation), check that the construction would be allowed. *)
-let check_construct_mutability mutability (argument_mode : expected_mode) =
+(** Takes the modality and mutability on a field, and expected mode of the field
+    (adjusted for allocation, modality and mode crossing of the field type
+    without modality), check that the construction would be allowed. *)
+let check_construct_mutability modality mutability (argument_mode : expected_mode) =
   match mutability with
   | Immutable -> ()
   | Mutable m0 ->
       let m0 = mutable_mode m0 in
+      let m0 = Modality.Value.apply modality m0 in
       match Value.submode m0 argument_mode.mode with
       | Ok () -> ()
       | Error _ ->
@@ -5539,8 +5541,14 @@ and type_expect_
           None, expected_mode
       in
       let type_label_exp ((_, label, _) as x) =
-        check_construct_mutability label.lbl_mut argument_mode;
-        let argument_mode = mode_modality label.lbl_modalities argument_mode in
+        let argument_mode =
+          argument_mode
+          |> mode_modality label.lbl_modalities
+        (* Duplicated mode-crossing for [label.lbl_arg]: once here, another time
+           in [type_label_exp] calling [type_argument]. *)
+          |> expect_mode_cross env label.lbl_arg
+        in
+        check_construct_mutability label.lbl_modalities label.lbl_mut argument_mode;
         type_label_exp true env argument_mode loc ty_record x
       in
       let lbl_exp_list = List.map type_label_exp lbl_a_list in
@@ -5602,10 +5610,12 @@ and type_expect_
                   with_explanation (fun () ->
                     unify_exp_types loc env (instance ty_expected) ty_res2);
                   let mode = Modality.Value.apply lbl.lbl_modalities mode in
-                  check_construct_mutability lbl.lbl_mut argument_mode;
                   let argument_mode =
-                    mode_modality lbl.lbl_modalities argument_mode
+                    argument_mode
+                    |> mode_modality lbl.lbl_modalities
+                    |> expect_mode_cross env lbl.lbl_arg
                   in
+                  check_construct_mutability lbl.lbl_modalities lbl.lbl_mut argument_mode;
                   submode ~loc ~env mode argument_mode;
                   Kept (ty_arg1, lbl.lbl_mut,
                         unique_use ~loc ~env mode argument_mode.mode)
@@ -8654,14 +8664,17 @@ and type_generic_array
     else
       Predef.type_iarray, Modality.Value.id
   in
-  check_construct_mutability mutability argument_mode;
-  let argument_mode = mode_modality modalities argument_mode in
   let jkind, elt_sort = Jkind.of_new_sort_var ~why:Array_element in
   let ty = newgenvar jkind in
   let to_unify = type_ ty in
   with_explanation explanation (fun () ->
     unify_exp_types loc env to_unify (generic_instance ty_expected));
-  let argument_mode = expect_mode_cross env ty argument_mode in
+  let argument_mode =
+    argument_mode
+    |> mode_modality modalities
+    |> expect_mode_cross env ty
+  in
+  check_construct_mutability modalities mutability argument_mode;
   let argl =
     List.map
       (fun sarg -> type_expect env argument_mode sarg (mk_expected ty))
