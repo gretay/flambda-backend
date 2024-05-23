@@ -73,6 +73,7 @@ type basic_block =
 type codegen_option =
   | Reduce_code_size
   | No_CSE
+  | Stack_check_move_allowed
 
 val of_cmm_codegen_option : Cmm.codegen_option list -> codegen_option list
 
@@ -90,8 +91,10 @@ type t = private
     entry_label : Label.t;
         (** This label must be the first in all layouts of this cfg. *)
     fun_contains_calls : bool;  (** Precomputed at selection time. *)
-    fun_num_stack_slots : int array
+    fun_num_stack_slots : int array;
         (** Precomputed at register allocation time *)
+    fun_stack_check_skip_callees : Misc.Stdlib.String.Set.t
+        (** Callees for which the stack checks will be skipped *)
   }
 
 val create :

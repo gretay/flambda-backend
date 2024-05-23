@@ -130,7 +130,15 @@ val report_error: Format.formatter -> error -> unit
 
 type preproc_stack_check_result =
   { max_frame_size : int;
-    contains_nontail_calls : bool }
+    (* for the function itself *)
+    max_frame_size_with_calls : int;
+    (* for the function itself *and* the calls to the functions in `callees` *)
+    callees : Misc.Stdlib.String.Set.t;
+    (* direct calls for which stack consumption is known and accounted for in
+       `max_frame_size_with_calls` *)
+    contains_nontail_calls : bool;
+    (* whether there are non-tail calls to functions not appearing in `callees` *)
+  }
 
 val preproc_stack_check:
   fun_body:Linear.instruction ->

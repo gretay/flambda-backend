@@ -48,6 +48,7 @@ type basic_block =
 type codegen_option =
   | Reduce_code_size
   | No_CSE
+  | Stack_check_move_allowed
 
 let rec of_cmm_codegen_option : Cmm.codegen_option list -> codegen_option list =
  fun cmm_options ->
@@ -57,6 +58,8 @@ let rec of_cmm_codegen_option : Cmm.codegen_option list -> codegen_option list =
     match hd with
     | No_CSE -> No_CSE :: of_cmm_codegen_option tl
     | Reduce_code_size -> Reduce_code_size :: of_cmm_codegen_option tl
+    | Stack_check_move_allowed ->
+      Stack_check_move_allowed :: of_cmm_codegen_option tl
     | Use_linscan_regalloc | Assume_zero_alloc _ | Check_zero_alloc _ ->
       of_cmm_codegen_option tl)
 
@@ -69,7 +72,8 @@ type t =
     entry_label : Label.t;
     fun_contains_calls : bool;
     (* CR-someday gyorsh: compute locally. *)
-    fun_num_stack_slots : int array
+    fun_num_stack_slots : int array;
+    fun_stack_check_skip_callees : Misc.Stdlib.String.Set.t
   }
 
 let create ~fun_name ~fun_args ~fun_codegen_options ~fun_dbg ~fun_contains_calls
@@ -83,7 +87,8 @@ let create ~fun_name ~fun_args ~fun_codegen_options ~fun_dbg ~fun_contains_calls
        currently rely on it to be initialized as above. *)
     blocks = Label.Tbl.create 31;
     fun_contains_calls;
-    fun_num_stack_slots
+    fun_num_stack_slots;
+    fun_stack_check_skip_callees = Misc.Stdlib.String.Set.empty
   }
 
 let mem_block t label = Label.Tbl.mem t.blocks label
