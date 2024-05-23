@@ -143,12 +143,13 @@ struct caml_thread_table {
 /* thread_table instance, up to Max_domains */
 static struct caml_thread_table thread_table[Max_domains];
 
-#define Locking_scheme(dom_id) (thread_table[dom_id].locking_scheme)
-#define Default_lock(dom_id) (&thread_table[dom_id].default_lock)
-#define Default_locking_scheme(dom_id) (&thread_table[dom_id].default_locking_scheme)
+#define Locking_scheme(dom_id) (thread_table[0].locking_scheme)
+#define Default_lock(dom_id) (&thread_table[0].default_lock)
+#define Default_locking_scheme(dom_id) (&thread_table[0].default_locking_scheme)
 
 static void thread_lock_acquire(int dom_id)
 {
+  dom_id = 0;
   struct caml_locking_scheme* s;
 
   /* The locking scheme may be changed by the thread that currently
@@ -168,6 +169,8 @@ static void thread_lock_acquire(int dom_id)
 
 static void thread_lock_release(int dom_id)
 {
+  dom_id = 0;
+
   /* There is no tricky case here like in acquire, as only the holder
      of the lock can change it. (Here, that's us) */
   struct caml_locking_scheme *s;
@@ -181,16 +184,16 @@ static void thread_lock_release(int dom_id)
    also the head of a circular list of thread descriptors for this
    domain. Invariant: at every safe point, either Active_thread is
    NULL, or Caml_state is setup for Active_thread. */
-#define Active_thread thread_table[Caml_state->id].active_thread
+#define Active_thread thread_table[0].active_thread
 
 /* Whether the "tick" thread is already running for this domain */
-#define Tick_thread_running thread_table[Caml_state->id].tick_thread_running
+#define Tick_thread_running thread_table[0].tick_thread_running
 
 /* Whether the "tick" thread is disabled for this domain */
-#define Tick_thread_disabled thread_table[Caml_state->id].tick_thread_disabled
+#define Tick_thread_disabled thread_table[0].tick_thread_disabled
 
 /* The thread identifier of the "tick" thread for this domain */
-#define Tick_thread_id thread_table[Caml_state->id].tick_thread_id
+#define Tick_thread_id thread_table[0].tick_thread_id
 
 /* Identifier for next thread creation */
 static atomic_uintnat thread_next_id = 0;
@@ -308,7 +311,7 @@ CAMLexport void caml_thread_restore_runtime_state(void)
 CAMLexport void caml_switch_runtime_locking_scheme(struct caml_locking_scheme* new)
 {
   struct caml_locking_scheme* old;
-  int dom_id = Caml_state->id;
+  int dom_id = 0;//Caml_state->id;
   save_runtime_state();
   old = atomic_exchange(&Locking_scheme(dom_id), new);
   /* We hold 'old', but it is no longer the runtime lock */
@@ -665,7 +668,7 @@ static void caml_thread_stop(void)
 static void * caml_thread_start(void * v)
 {
   caml_thread_t th = (caml_thread_t) v;
-  int dom_id = th->domain_id;
+  int dom_id =0;// th->domain_id;
   value clos;
   void * signal_stack;
 
