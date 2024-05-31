@@ -1144,7 +1144,7 @@ let update_label_jkinds env loc lbls named ~is_inlined =
   let lbls =
     List.mapi (fun idx (Types.{ld_type; ld_id; ld_loc} as lbl) ->
       check_representable ~why:(Label_declaration ld_id)
-        ~allow_unboxed:(Option.is_some named) env ld_loc kloc ld_type;
+        ~allow_unboxed:true env ld_loc kloc ld_type;
       let ld_jkind = Ctype.type_jkind env ld_type in
       update idx ld_jkind;
       {lbl with ld_jkind}
@@ -1336,11 +1336,6 @@ let update_constructor_representation
               in
               raise (Error (loc, Illegal_mixed_product violation)))
     | Cstr_record fields ->
-        (* CR layouts v5.1: Mixed inline records are rejected in
-           [update_label_jkinds] so this apparent "support" is misleading.
-           This will be resolved soon by adding support for mixed inline
-           records.
-        *)
         let arg_reprs =
           List.map (fun ld ->
               Element_repr.classify env loc ld.Types.ld_type ld.ld_jkind, ld)

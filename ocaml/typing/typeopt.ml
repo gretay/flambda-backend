@@ -457,60 +457,72 @@ and value_kind_variant env ~loc ~visited ~depth ~num_nodes_visited
     end
   | Variant_boxed cstrs_and_jkinds ->
     let depth = depth + 1 in
+    let for_constructor_fields fields ~depth ~num_nodes_visited ~field_to_type =
+      List.fold_left_map
+        (fun num_nodes_visited field ->
+           let ty = field_to_type field in
+           let num_nodes_visited = num_nodes_visited + 1 in
+           value_kind env ~loc ~visited ~depth ~num_nodes_visited ty)
+        num_nodes_visited
+        fields
+    in
+    let for_one_uniform_value_constructor
+        fields ~field_to_type ~depth ~num_nodes_visited =
+      let num_nodes_visited, fields =
+        for_constructor_fields fields ~depth ~num_nodes_visited ~field_to_type
+      in
+      num_nodes_visited, Lambda.Constructor_uniform fields
+    in
+    let for_one_mixed_constructor fields ~value_prefix_len ~flat_suffix
+        ~field_to_type ~depth ~num_nodes_visited =
+      let value_prefix, _ =
+        Misc.Stdlib.List.split_at value_prefix_len fields
+      in
+      assert (List.length value_prefix = value_prefix_len);
+      let num_nodes_visited, value_prefix =
+        for_constructor_fields value_prefix ~depth ~num_nodes_visited
+          ~field_to_type
+      in
+      num_nodes_visited + Array.length flat_suffix,
+      Lambda.Constructor_mixed
+        { value_prefix; flat_suffix = Array.to_list flat_suffix }
+    in
     let for_one_constructor (constructor : Types.constructor_declaration)
           ~depth ~num_nodes_visited
           ~(cstr_shape : Types.constructor_representation) =
       let num_nodes_visited = num_nodes_visited + 1 in
       match constructor.cd_args with
       | Cstr_tuple fields ->
-        let fold_value_fields fields ~num_nodes_visited =
-          List.fold_left_map
-            (fun num_nodes_visited (ty, _) ->
-               let num_nodes_visited = num_nodes_visited + 1 in
-               value_kind env ~loc ~visited ~depth ~num_nodes_visited ty)
-            num_nodes_visited
-            fields
+        let num_nodes_visited, fields =
+          match cstr_shape with
+          | Constructor_uniform_value ->
+              for_one_uniform_value_constructor fields ~field_to_type:fst
+                ~depth ~num_nodes_visited
+          | Constructor_mixed { value_prefix_len; flat_suffix } ->
+              for_one_mixed_constructor fields
+                ~value_prefix_len ~flat_suffix ~field_to_type:fst
+                ~depth ~num_nodes_visited
+        in
+        (false, num_nodes_visited), fields
+      | Cstr_record labels ->
+        let field_to_type (lbl:Types.label_declaration) = lbl.ld_type in
+        let is_mutable =
+          List.exists
+            (fun (lbl:Types.label_declaration) ->
+               Types.is_mutable lbl.ld_mutable)
+            labels
         in
         let num_nodes_visited, fields =
           match cstr_shape with
           | Constructor_uniform_value ->
-              let num_nodes_visited, fields =
-                fold_value_fields fields ~num_nodes_visited
-              in
-              num_nodes_visited, Lambda.Constructor_uniform fields
+              for_one_uniform_value_constructor labels ~field_to_type
+                ~depth ~num_nodes_visited
           | Constructor_mixed { value_prefix_len; flat_suffix } ->
-              let value_prefix, _ =
-                Misc.Stdlib.List.split_at value_prefix_len fields
-              in
-              assert (List.length value_prefix = value_prefix_len);
-              let num_nodes_visited, value_prefix =
-                fold_value_fields value_prefix ~num_nodes_visited
-              in
-              num_nodes_visited + Array.length flat_suffix,
-              Lambda.Constructor_mixed
-                { value_prefix; flat_suffix = Array.to_list flat_suffix }
+              for_one_mixed_constructor labels
+                ~value_prefix_len ~flat_suffix ~field_to_type
+                ~depth ~num_nodes_visited
         in
-        (false, num_nodes_visited), fields
-      | Cstr_record labels ->
-          (* CR layouts v5.1: This will need to be updated when we support
-             mixed inlined records.
-          *)
-        let num_nodes_visited, fields =
-          List.fold_left_map
-            (fun (is_mutable, num_nodes_visited)
-                (label:Types.label_declaration) ->
-                let is_mutable =
-                  Types.is_mutable label.ld_mutable || is_mutable
-                in
-                let num_nodes_visited = num_nodes_visited + 1 in
-                let num_nodes_visited, field =
-                  value_kind env ~loc ~visited ~depth ~num_nodes_visited
-                    label.ld_type
-                in
-                (is_mutable, num_nodes_visited), field)
-            (false, num_nodes_visited) labels
-        in
-        num_nodes_visited, Lambda.Constructor_uniform fields
+        (is_mutable, num_nodes_visited), fields
     in
     let is_constant (cstr: Types.constructor_declaration) =
       (* CR layouts v5: This won't count constructors with void args as
