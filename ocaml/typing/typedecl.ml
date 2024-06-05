@@ -1239,6 +1239,7 @@ module Element_repr = struct
          flambda2 to unbox for 32 bit platforms.
       *)
       | Immediate64 -> Value_element
+      | Value_or_null -> Value_element
       | Value -> Value_element
       | Immediate -> Imm_element
       | Float64 -> Unboxed_element Float64
@@ -1247,7 +1248,7 @@ module Element_repr = struct
       | Bits32 -> Unboxed_element Bits32
       | Bits64 -> Unboxed_element Bits64
       | Void -> Element_without_runtime_component { loc; ty }
-      | Any ->
+      | Any | Any_non_null ->
           Misc.fatal_error "Element_repr.classify: unexpected Any"
 
   let unboxed_to_flat : unboxed_element -> flat_element = function
