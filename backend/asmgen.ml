@@ -161,9 +161,9 @@ let write_ir prefix =
 let should_emit () =
   not (should_stop_after Compiler_pass.Scheduling)
 
-let should_use_linscan fd =
+let should_use_linscan fun_codegen_options =
   !use_linscan ||
-  List.mem Cmm.Use_linscan_regalloc fd.Mach.fun_codegen_options
+  List.mem Cmm.Use_linscan_regalloc fun_codegen_options
 
 let if_emit_do f x = if should_emit () then f x else ()
 let emit_begin_assembly unix = if_emit_do Emit.begin_assembly unix
@@ -184,13 +184,13 @@ let emit_fundecl f =
       raise (Error (Asm_generation(fundecl.Linear.fun_name, e))))
     f
 
-let rec regalloc ~ppf_dump round fd =
+let rec regalloc ~ppf_dump round (fd : Mach.fundecl) =
   if round > 50 then
     fatal_error(fd.Mach.fun_name ^
                 ": function too complex, cannot complete register allocation");
   dump_if ppf_dump dump_live "Liveness analysis" fd;
   let num_stack_slots =
-    if should_use_linscan fd then begin
+    if should_use_linscan fd.fun_codegen_options then begin
       (* Linear Scan *)
       let intervals = Interval.build_intervals fd in
       if !dump_interval then Printmach.intervals ppf_dump intervals;
@@ -256,7 +256,7 @@ let default_allocator = Upstream
 
 let register_allocator fd : register_allocator =
   match String.lowercase_ascii !Flambda_backend_flags.regalloc with
-  | "cfg" -> if should_use_linscan fd then LS else IRC
+  | "cfg" -> if should_use_linscan fd.fun_codegen_options then LS else IRC
   | "gi" -> GI
   | "irc" -> IRC
   | "ls" -> LS
@@ -268,9 +268,14 @@ let use_cfg_stack_checks fd_cmm =
   !Flambda_backend_flags.cfg_stack_checks
   && List.mem Stack_check_move_allowed fd_cmm.fun_codegen_options
 
+let is_upstream = function
+  | Upstream -> true
+  | GI | IRC | LS -> false
+
 let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
   Proc.init ();
   Reg.reset();
+  let register_allocator = register_allocator fd_cmm in
   fd_cmm
   ++ Profile.record ~accumulate:true "cmm_invariants" (cmm_invariants ppf_dump)
   ++ Profile.record ~accumulate:true "selection"
@@ -282,8 +287,19 @@ let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
   ++ Profile.record ~accumulate:true "polling"
        (Polling.instrument_fundecl ~future_funcnames:funcnames)
   ++ Compiler_hooks.execute_and_pipe Compiler_hooks.Mach_polling
-  ++ Profile.record ~accumulate:true "zero_alloc_checker"
-       (Zero_alloc_checker.fundecl ~future_funcnames:funcnames ppf_dump)
+  ++ (fun fd ->
+      match !Flambda_backend_flags.cfg_zero_alloc_checker with
+      | false ->
+        fd
+        ++ Profile.record ~accumulate:true "zero_alloc_checker"
+             (Zero_alloc_checker.fundecl ~future_funcnames:funcnames ppf_dump)
+      | true ->
+        (* Will happen after `Cfgize`. *)
+        if is_upstream register_allocator then
+          fatal_error
+            "-cfg-zero-alloc-checker should only be used with a CFG register allocator";
+        fd
+     )
   ++ (fun fd ->
       match !Flambda_backend_flags.cfg_cse_optimize with
       | false ->
@@ -297,20 +313,25 @@ let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
         ++ pass_dump_if ppf_dump dump_cse "After CSE"
       | true ->
         (* Will happen after `Cfgize`. *)
-        (match register_allocator fd with
-         | Upstream ->
-           fatal_error "-cfg-cse-optimize should only be used with a CFG register allocator"
-         | GI | IRC | LS ->
-           ());
+        if is_upstream register_allocator then
+          fatal_error
+            "-cfg-cse-optimize should only be used with a CFG register allocator";
         fd)
   ++ Profile.record ~accumulate:true "regalloc" (fun (fd : Mach.fundecl) ->
-    match register_allocator fd with
+    match register_allocator with
       | ((GI | IRC | LS) as regalloc) ->
       fd
       ++ Profile.record ~accumulate:true "cfg" (fun fd ->
         let cfg =
           fd
           ++ Profile.record ~accumulate:true "cfgize" cfgize
+          ++ (fun cfg_with_layout ->
+              match !Flambda_backend_flags.cfg_zero_alloc_checker with
+              | false -> cfg_with_layout
+              | true ->
+                cfg_with_layout
+                ++ Profile.record ~accumulate:true "cfg_zero_alloc_checker"
+                     (Zero_alloc_checker.cfg ~future_funcnames:funcnames ppf_dump))
           ++ (fun cfg_with_layout ->
               match !Flambda_backend_flags.cfg_cse_optimize with
               | false -> cfg_with_layout
@@ -334,12 +355,15 @@ let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
           | Upstream -> assert false
         end
         ++ Cfg_with_infos.cfg_with_layout
-        ++ Profile.record ~accumulate:true "cfg_validate_description" (Regalloc_validate.run cfg_description)
+        ++ Profile.record ~accumulate:true "cfg_validate_description"
+             (Regalloc_validate.run cfg_description)
         ++ Profile.record ~accumulate:true "cfg_simplify" Regalloc_utils.simplify_cfg
-          (* CR-someday gtulbalecu: The peephole optimizations must not affect liveness, otherwise
-             we would have to recompute it here. Recomputing it here breaks the CI because
-             the liveness_analysis algorithm does not work properly after register allocation. *)
-        ++ Profile.record ~accumulate:true "peephole_optimize_cfg" Peephole_optimize.peephole_optimize_cfg
+        (* CR-someday gtulbalecu: The peephole optimizations must not affect liveness,
+           otherwise we would have to recompute it here. Recomputing it here breaks the CI
+           because the liveness_analysis algorithm does not work properly after register
+           allocation. *)
+        ++ Profile.record ~accumulate:true "peephole_optimize_cfg"
+             Peephole_optimize.peephole_optimize_cfg
         ++ (fun (cfg_with_layout : Cfg_with_layout.t) ->
           match use_cfg_stack_checks fd_cmm with
           | false -> cfg_with_layout

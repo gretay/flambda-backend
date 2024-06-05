@@ -266,6 +266,8 @@ Caml_inline mlsize_t Scannable_wosize_reserved_byte(reserved_t res,
 #define Bhsize_hp(hp) (Bsize_wsize (Whsize_hp (hp)))
 #define Bhsize_hd(hd) (Bsize_wsize (Whsize_hd (hd)))
 
+#define Scannable_wosize_hp(hp) (Scannable_wosize_hd (Hd_hp (hp)))
+
 #define Profinfo_val(val) (Profinfo_hd (Hd_val (val)))
 
 #ifdef ARCH_BIG_ENDIAN
@@ -518,6 +520,22 @@ CAMLextern header_t *caml_atom_table;
 extern value caml_global_data;
 
 CAMLextern value caml_set_oo_id(value obj);
+
+/* Users write this to assert that the ensuing C code is sensitive
+   to the current layout of mixed blocks in a way that's subject
+   to change in future compiler releases. We'll bump the version
+   number when we make a breaking change. For example, we currently
+   don't pack int32's efficiently, and we will want to someday.
+
+   Users can write:
+
+   Assert_mixed_block_layout_v1;
+
+   (Hack: we define using _Static_assert rather than just an empty
+   definition so that users can write a semicolon, which is treated
+   better by C formatters.)
+ */
+#define Assert_mixed_block_layout_v1 _Static_assert(1, "")
 
 /* Header for out-of-heap blocks. */
 
